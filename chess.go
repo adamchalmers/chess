@@ -5,12 +5,14 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"net/url"
 	"regexp"
+	"strconv"
 )
 
-var idArg = regexp.MustCompile("id=(.*)")
+var idArg = regexp.MustCompile("id=([0-9]*)")
+var moveArg = regexp.MustCompile("move=([PRNBKQ][wb])&x1=([1-8])&y1=([1-8])&x2=([1-8])&y2=([1-8])")
 var games = make(map[string]*game)
+var emptyPiece = piece{"E", true}
 
 /* * * * * * * * * * * * *
  *      Chess types
@@ -35,6 +37,10 @@ func (p *piece) String() string {
 type move struct {
 	p              piece
 	x1, y1, x2, y2 int
+}
+
+func (m *move) String() string {
+	return fmt.Sprintf("%v (%v,%v) to (%v,%v)", m.p, m.x1, m.y1, m.x2, m.y2)
 }
 
 type game struct {
@@ -90,11 +96,22 @@ func (g *game) String() string {
 		output += "\n"
 	}
 	if g.white_turn {
-		output += "White to move."
+		output += "\nWhite to move.\n"
 	} else {
-		output += "Black to move."
+		output += "\nBlack to move.\n"
+	}
+	output += "\nMove log:\n"
+	for m := range g.moves {
+		output += g.moves[m].String() + "\n"
 	}
 	return output
+}
+
+func (g *game) Move(m *move) error {
+	g.board[m.x2][m.y2] = g.board[m.x1][m.y1]
+	g.board[m.x1][m.y1] = emptyPiece
+	g.moves = append(g.moves, *m)
+	return nil
 }
 
 /* * * * * * * * * * * * *
@@ -112,6 +129,10 @@ func newGameHandler(w http.ResponseWriter, r *http.Request) {
 	num := rand.Intn(1000)
 	id := fmt.Sprintf("%v", num)
 	games[id] = newGame()
+	redirectToGame(w, r, id)
+}
+
+func redirectToGame(w http.ResponseWriter, r *http.Request, id string) {
 	http.Redirect(w, r, "/info/?id="+id, http.StatusFound)
 }
 
@@ -119,13 +140,24 @@ func newGameHandler(w http.ResponseWriter, r *http.Request) {
 // e.g. in /remote/img?url=wwww.google.com, returns www.google.com
 func gameParam(r *http.Request) (string, error) {
 	m := idArg.FindStringSubmatch(r.URL.String())
-	if m == nil || len(m) < 1 {
+	if m == nil {
 		return "", fmt.Errorf("Invalid regex.", r.URL.String())
 	}
-	if _, err := url.Parse(m[1]); err != nil {
-		return "", fmt.Errorf("Invalid url", m[1])
-	}
 	return m[1], nil
+}
+
+// Returns the move from the move parameter.
+func moveParam(r *http.Request) (*move, error) {
+	m := moveArg.FindStringSubmatch(r.URL.String())
+	if m == nil {
+		return new(move), fmt.Errorf("Invalid regex.", r.URL.String())
+	}
+	precision := 32
+	x1, _ := strconv.ParseInt(m[2], 0, precision)
+	y1, _ := strconv.ParseInt(m[3], 0, precision)
+	x2, _ := strconv.ParseInt(m[4], 0, precision)
+	y2, _ := strconv.ParseInt(m[5], 0, precision)
+	return &move{piece{string(m[1][0]), true}, int(x1), int(y1), int(x2), int(y2)}, nil
 }
 
 // Display the state of all games.
@@ -139,8 +171,38 @@ func infoHandler(w http.ResponseWriter, r *http.Request) {
 
 		w.Write([]byte(s))
 	} else {
-		s := fmt.Sprintf("Game ID %v\n\n%v", id, games[id])
-		w.Write([]byte(s))
+		w.Write([]byte(games[id].String()))
+	}
+}
+
+// Make a movie on a certain game.
+func moveHandler(w http.ResponseWriter, r *http.Request) {
+
+	// Parse the game ID
+	id, err := gameParam(r)
+	if err != nil {
+		fmt.Println("Error parsing game ID.")
+		return
+	}
+
+	// Check the game ID actually exists
+	if game, ok := games[id]; ok {
+
+		// Parse the move
+		move, err := moveParam(r)
+		if err != nil {
+			fmt.Println("Error parsing the move.")
+			return
+		}
+		game.Move(move)
+
+		fmt.Println("Made a move.")
+		redirectToGame(w, r, id)
+
+		// If the game doesn't exist, just error and quit.
+	} else {
+		fmt.Printf("Game %v doesn't exist.\n", id)
+		return
 	}
 
 }
@@ -153,6 +215,7 @@ func main() {
 	http.HandleFunc("/", fileHandler)
 	http.HandleFunc("/new/", newGameHandler)
 	http.HandleFunc("/info/", infoHandler)
+	http.HandleFunc("/move/", moveHandler)
 
 	err := http.ListenAndServe(port, nil)
 	if err != nil {
