@@ -5,7 +5,12 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
+	"regexp"
 )
+
+var idArg = regexp.MustCompile("id=(.*)")
+var games = make(map[string]*game)
 
 /* * * * * * * * * * * * *
  *      Chess types
@@ -96,28 +101,48 @@ func (g *game) String() string {
  *      Server logic
  * * * * * * * * * * * * */
 
-// Maps game IDs to games.
-var games = make(map[string]*game)
-
 // Serve a static file.
 func fileHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "web/"+r.URL.Path[1:])
 }
 
+// Make a new game, redirect the user to it.
 func newGameHandler(w http.ResponseWriter, r *http.Request) {
 	// Generate a random ID
 	num := rand.Intn(1000)
 	id := fmt.Sprintf("%v", num)
 	games[id] = newGame()
+	http.Redirect(w, r, "/info/?id="+id, http.StatusFound)
 }
 
+// Returns the game query parameter
+// e.g. in /remote/img?url=wwww.google.com, returns www.google.com
+func gameParam(r *http.Request) (string, error) {
+	m := idArg.FindStringSubmatch(r.URL.String())
+	if m == nil || len(m) < 1 {
+		return "", fmt.Errorf("Invalid regex.", r.URL.String())
+	}
+	if _, err := url.Parse(m[1]); err != nil {
+		return "", fmt.Errorf("Invalid url", m[1])
+	}
+	return m[1], nil
+}
+
+// Display the state of all games.
 func infoHandler(w http.ResponseWriter, r *http.Request) {
-	s := ""
-	for id, game := range games {
-		s += fmt.Sprintf("Game ID %v\n\n%v", id, game.String())
+	id, err := gameParam(r)
+	if err != nil {
+		s := ""
+		for id, game := range games {
+			s += fmt.Sprintf("Game ID %v\n\n%v", id, game.String())
+		}
+
+		w.Write([]byte(s))
+	} else {
+		s := fmt.Sprintf("Game ID %v\n\n%v", id, games[id])
+		w.Write([]byte(s))
 	}
 
-	w.Write([]byte(s))
 }
 
 func main() {
