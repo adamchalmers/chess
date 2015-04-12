@@ -1,3 +1,4 @@
+library chess;
 import "dart:math";
 
 class Piece {
