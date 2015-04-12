@@ -10,7 +10,7 @@ import (
 )
 
 var idArg = regexp.MustCompile("id=([0-9]*)")
-var moveArg = regexp.MustCompile("move=([PRNBKQ][wb])&x1=([1-8])&y1=([1-8])&x2=([1-8])&y2=([1-8])")
+var moveArg = regexp.MustCompile("move=([PRNBKQ][wb])&x1=([0-7])&y1=([0-7])&x2=([0-7])&y2=([0-7])")
 var games = make(map[string]*game)
 var emptyPiece = piece{"E", true}
 
@@ -49,9 +49,27 @@ type game struct {
 	white_turn bool
 }
 
+func (g *game) serialize() string {
+	s := ""
+	for x := 0; x < 8; x++ {
+		for y := 0; y < 8; y++ {
+			s += g.board[x][y].String()
+		}
+	}
+	return s
+}
+
 func newGame() *game {
 	g := new(game)
 	g.white_turn = true
+
+	// Make an empty board
+	for i := 0; i < 8; i++ {
+		for j := 0; j < 8; j++ {
+			g.board[j][i] = piece{"E", true}
+		}
+	}
+
 	// Sixteen pawns
 	for i := range g.board {
 		g.board[1][i] = piece{"P", false}
@@ -78,12 +96,6 @@ func newGame() *game {
 	// Two queens
 	g.board[0][4] = piece{"Q", false}
 	g.board[7][3] = piece{"Q", true}
-	// Remaining squares are empty
-	for i := 0; i < 8; i++ {
-		for j := 2; j < 6; j++ {
-			g.board[j][i] = piece{"E", true}
-		}
-	}
 	return g
 }
 
@@ -108,8 +120,10 @@ func (g *game) String() string {
 }
 
 func (g *game) Move(m *move) error {
-	g.board[m.x2][m.y2] = g.board[m.x1][m.y1]
-	g.board[m.x1][m.y1] = emptyPiece
+	//g.board[m.x2][m.y2] = g.board[m.x1][m.y1]
+	//g.board[m.x1][m.y1] = emptyPiece
+	g.board[m.y2][m.x2] = g.board[m.y1][m.x1]
+	g.board[m.y1][m.x1] = emptyPiece
 	g.moves = append(g.moves, *m)
 	return nil
 }
@@ -129,7 +143,7 @@ func newGameHandler(w http.ResponseWriter, r *http.Request) {
 	num := rand.Intn(1000)
 	id := fmt.Sprintf("%v", num)
 	games[id] = newGame()
-	redirectToGame(w, r, id)
+	http.Redirect(w, r, "/game.html?id="+id, http.StatusFound)
 }
 
 func redirectToGame(w http.ResponseWriter, r *http.Request, id string) {
@@ -148,6 +162,7 @@ func gameParam(r *http.Request) (string, error) {
 
 // Returns the move from the move parameter.
 func moveParam(r *http.Request) (*move, error) {
+	fmt.Println(r.URL.String())
 	m := moveArg.FindStringSubmatch(r.URL.String())
 	if m == nil {
 		return new(move), fmt.Errorf("Invalid regex.", r.URL.String())
@@ -173,6 +188,31 @@ func infoHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Write([]byte(games[id].String()))
 	}
+}
+
+func playHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := gameParam(r)
+	fmt.Println(id)
+	fmt.Println(err)
+	if err != nil {
+		s := "No such game"
+		w.Write([]byte(s))
+		return
+	}
+	resp := games[id].serialize()
+	fmt.Println(resp)
+	http.Redirect(w, r, "/game.html?id="+id, http.StatusFound)
+}
+
+func boardHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := gameParam(r)
+	if err != nil {
+		s := "No such game!"
+		w.Write([]byte(s))
+		return
+	}
+	resp := games[id].serialize()
+	w.Write([]byte(resp))
 }
 
 // Make a movie on a certain game.
@@ -216,6 +256,8 @@ func main() {
 	http.HandleFunc("/new/", newGameHandler)
 	http.HandleFunc("/info/", infoHandler)
 	http.HandleFunc("/move/", moveHandler)
+	http.HandleFunc("/play/", playHandler)
+	http.HandleFunc("/board/", boardHandler)
 
 	err := http.ListenAndServe(port, nil)
 	if err != nil {

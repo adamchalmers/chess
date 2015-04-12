@@ -2,5 +2,6 @@ name: Platformer
 description: A sample web application
 dependencies:
   browser: any
+  http: any
 dev_dependencies:
   unittest: '>=0.10.0'
