@@ -32,9 +32,13 @@ class Board{
   List<List<Piece>> board;
   List<Move> moves;
   Point<int> selected = null;
+  String lastBoard;
+  
+  
   Board(String str) {
-    // Empty board
     moves = [];
+    
+    // Set up an empty board
     board = new List<List<Piece>>();
     for (int x = 0; x < 8; x++) {
       board.add(new List<Piece>());
@@ -42,11 +46,18 @@ class Board{
         board[x].add(Piece.EMPTY);
       }
     }
-    // Load from JSON
+    // Load the pieces from the serialized string.
+    loadIntoBoard(str);
+    lastBoard = str;
+  }
+  
+  
+  loadIntoBoard(String boardStr) {
+    //if (boardStr == lastBoard) return;
     int i = 0;
     for (int x = 0; x < 8; x++) {
       for (int y = 0; y < 8; y++) {
-        board[y][x] = Piece.fromStr(str[i] + str[i+1]);
+        board[y][x] = Piece.fromStr(boardStr[i] + boardStr[i+1]);
         i += 2;
       }
     }

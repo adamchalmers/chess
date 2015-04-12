@@ -45,7 +45,7 @@ func (m *move) String() string {
 
 type game struct {
 	board      [8][8]piece
-	moves      []move
+	moves      []move // Length forms a logical clock.
 	white_turn bool
 }
 
@@ -157,12 +157,15 @@ func gameParam(r *http.Request) (string, error) {
 	if m == nil {
 		return "", fmt.Errorf("Invalid regex.", r.URL.String())
 	}
-	return m[1], nil
+	id := m[1]
+	if _, ok := games[id]; !ok {
+		return "", fmt.Errorf("Game %v doesn't exist.", id)
+	}
+	return id, nil
 }
 
 // Returns the move from the move parameter.
 func moveParam(r *http.Request) (*move, error) {
-	fmt.Println(r.URL.String())
 	m := moveArg.FindStringSubmatch(r.URL.String())
 	if m == nil {
 		return new(move), fmt.Errorf("Invalid regex.", r.URL.String())
@@ -236,7 +239,7 @@ func moveHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		game.Move(move)
 
-		fmt.Println("Made a move.")
+		fmt.Printf("Made a move in game %v.\n", id)
 		redirectToGame(w, r, id)
 
 		// If the game doesn't exist, just error and quit.

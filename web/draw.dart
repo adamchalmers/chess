@@ -31,7 +31,7 @@ void drawCell(int x, int y, CanvasRenderingContext2D ctx) {
 }
 
 void drawSelectedCell(Board board, int x, int y, CanvasRenderingContext2D ctx) {
-  ctx.fillStyle = "#00d";
+  ctx.fillStyle = "#909";
   ctx.fillRect(OFFSET + x*TILE_SIZE, OFFSET + y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
   if ((x*8 + y + x%2)%2==0) {
     ctx.fillStyle = "#fff";
